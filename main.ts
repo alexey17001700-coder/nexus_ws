@@ -78,11 +78,20 @@ function pushHistory(room: string, raw: string) {
     if (h.length > MAX_HISTORY) h.splice(0, h.length - MAX_HISTORY);
 }
 
+/* список участников комнаты — для индикатора «кто в сети» */
+function usersOf(room: string) {
+    const r = rooms.get(room);
+    if (!r) return [];
+    const out: any[] = [];
+    for (const c of r) out.push({ id: c.id, nick: c.nick || "Гость" });
+    return out;
+}
+
 function leaveRoom(client: Client) {
     const r = rooms.get(client.room);
     if (!r) return;
     r.delete(client);
-    broadcast(client.room, { t: "presence", room: client.room, count: r.size });
+    broadcast(client.room, { t: "presence", room: client.room, count: r.size, users: usersOf(client.room) });
 }
 
 function joinRoom(client: Client, room: string) {
@@ -99,8 +108,8 @@ function joinRoom(client: Client, room: string) {
         try { items.push(JSON.parse(raw)); } catch (_) { /* skip */ }
     }
     send(client, { t: "history", room, items });
-    send(client, { t: "welcome", room, id: client.id, count: r.size });
-    broadcast(room, { t: "presence", room, count: r.size }, client);
+    send(client, { t: "welcome", room, id: client.id, count: r.size, users: usersOf(room) });
+    broadcast(room, { t: "presence", room, count: r.size, users: usersOf(room) }, client);
 }
 
 function handleMessage(client: Client, raw: string) {
