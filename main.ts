@@ -462,7 +462,7 @@ function handleMessage(client: Client, raw: string) {
 // =========================================
 // СЕРВЕР
 // =========================================
-Deno.serve({ port: PORT }, (request) => {
+Deno.serve({ port: PORT }, async (request) => {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
