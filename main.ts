@@ -392,6 +392,28 @@ function handleMessage(client: Client, raw: string) {
 
     if (msg.t === "leave") { leaveRoom(client); client.room = ""; return; }
 
+    /* --- Web Push: браузер присылает свою подписку --- */
+    if (msg.t === "sub") {
+        const sub: any = msg.d || msg.sub;
+        if (sub && sub.endpoint) {
+            const ep = String(sub.endpoint).slice(0, 500);
+            client.pushEnd = ep;
+            pushSave(ep, sub, client.nick || String(msg.nick || "").slice(0, 40), client.room || String(msg.room || ""));
+            send(client, { t: "subok", push: PUSH_ENABLED });
+        }
+        return;
+    }
+
+    /* --- Web Push: отписка (человек выключил уведомления) --- */
+    if (msg.t === "unsub") {
+        const sub: any = msg.d || msg.sub || {};
+        const ep = String(sub.endpoint || client.pushEnd || "");
+        pushDrop(ep);
+        client.pushEnd = undefined;
+        send(client, { t: "subok", push: false });
+        return;
+    }
+
     if (msg.t === "typing") {
         if (!client.room) return;
         broadcast(client.room, { t: "typing", room: client.room, nick: String(msg.nick || "").slice(0, 40) }, client);
@@ -411,6 +433,8 @@ function handleMessage(client: Client, raw: string) {
         if (msg.d && msg.d.kind !== "typing") pushHistory(room, packed);
 
         broadcast(room, envelope);
+        // push-уведомление тем, кто НЕ сидит в канале прямо сейчас
+        if (msg.d && msg.d.kind !== "typing") pushNotify(room, client.nick);
         return;
     }
 
