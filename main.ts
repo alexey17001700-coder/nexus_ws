@@ -129,7 +129,17 @@ function handleMessage(client: Client, raw: string) {
         const room = String(msg.room || "").slice(0, 120);
         if (!room) return;
         if (msg.id) client.id = String(msg.id).slice(0, 80);
+        if (msg.nick) client.nick = String(msg.nick).slice(0, 40);
         joinRoom(client, room);
+        return;
+    }
+
+    /* «кто в сети» — клиент может спросить список участников в любой момент */
+    if (msg.t === "who") {
+        const room = String(msg.room || client.room || "").slice(0, 120);
+        if (!room) return;
+        const r = rooms.get(room);
+        send(client, { t: "presence", room, count: r ? r.size : 0, users: usersOf(room) });
         return;
     }
 
