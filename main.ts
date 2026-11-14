@@ -272,6 +272,7 @@ function pushNotify(room: string, senderNick: string) {
     for (const [endpoint, rec] of pushSubs) {
         if (!rec.rooms.has(room)) continue;
         if (skip.has(endpoint)) continue;
+        if (rec.nick && liveNicks.has(rec.nick)) continue;
         if (rec.nick && senderNick && rec.nick === senderNick) continue;
         pushSendOne(endpoint, rec, payload);
     }
