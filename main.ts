@@ -274,11 +274,7 @@ function handleMessage(client: Client, raw: string) {
         const packed = JSON.stringify(envelope);
 
         // в истории держим только «постоянные» сообщения (без typing/служебных)
-        if (msg.d && msg.d.kind !== "typing") {
-            pushHistory(room, packed);
-            // уведомление в Telegram, если Босса нет в канале
-            try { tgNotify(room, client.nick); } catch (_) { /* ignore */ }
-        }
+        if (msg.d && msg.d.kind !== "typing") pushHistory(room, packed);
 
         broadcast(room, envelope);
         return;
@@ -288,6 +284,16 @@ function handleMessage(client: Client, raw: string) {
     if (msg.t === "dir") {
         const room = "__dir__";
         if (client.room !== room) joinRoom(client, room);
+        // запоминаем названия каналов — нужны для текста уведомлений
+        try {
+            const list = Array.isArray(msg.d) ? msg.d : [];
+            for (const c of list) {
+                if (!c || !c.id) continue;
+                const id = String(c.id);
+                if (c.del) { roomNames.delete(id); continue; }
+                roomNames.set(id, `${c.icon ? c.icon + " " : ""}${c.name || "канал"}`);
+            }
+        } catch (_) { /* ignore */ }
         const envelope = { t: "dir", room, d: msg.d, ts: Date.now() };
         pushHistory(room, JSON.stringify(envelope));
         broadcast(room, envelope);
