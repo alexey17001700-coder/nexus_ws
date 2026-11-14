@@ -274,7 +274,11 @@ function handleMessage(client: Client, raw: string) {
         const packed = JSON.stringify(envelope);
 
         // в истории держим только «постоянные» сообщения (без typing/служебных)
-        if (msg.d && msg.d.kind !== "typing") pushHistory(room, packed);
+        if (msg.d && msg.d.kind !== "typing") {
+            pushHistory(room, packed);
+            // уведомление в Telegram, если Босса нет в канале
+            try { tgNotify(room, client.nick); } catch (_) { /* ignore */ }
+        }
 
         broadcast(room, envelope);
         return;
