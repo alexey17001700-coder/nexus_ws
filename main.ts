@@ -482,7 +482,9 @@ Deno.serve({ port: PORT }, (request) => {
 
         socket.onopen = () => {
             allClients.add(client);
-            send(client, { t: "hello", id: client.id, server: "nexus-ws", ts: Date.now() });
+            /* vapid — ПУБЛИЧНЫЙ ключ, он не секрет: клиент берёт его отсюда,
+               чтобы подписаться на push. Приватный ключ остаётся только в env. */
+            send(client, { t: "hello", id: client.id, server: "nexus-ws", vapid: VAPID_PUBLIC, push: PUSH_ENABLED, ts: Date.now() });
         };
 
         socket.onmessage = (e) => {
