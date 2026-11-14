@@ -14,6 +14,40 @@ const PING_INTERVAL = 25_000;    // keep-alive пинг
 const MAX_ROOMS = 500;
 
 // =========================================
+// WEB PUSH — уведомления браузера (необязательный модуль)
+// VAPID-ключи ТОЛЬКО из переменных окружения. В коде секретов НЕТ.
+//   VAPID_PUBLIC   — публичный ключ (отдаётся клиенту, не секрет)
+//   VAPID_PRIVATE  — приватный ключ (НИКОГДА не публиковать)
+//   VAPID_SUBJECT  — mailto:твоя@почта  или  https://твой-домен
+// Ключей нет → push выключен, сервер работает как обычно.
+// =========================================
+const VAPID_PUBLIC = Deno.env.get("VAPID_PUBLIC") || "";
+const VAPID_PRIVATE = Deno.env.get("VAPID_PRIVATE") || "";
+const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") || "mailto:admin@example.com";
+const PUSH_THROTTLE = 5_000;   // не чаще 1 уведомления на канал в 5 сек
+
+let webpush: any = null;
+let PUSH_ENABLED = false;
+
+/* библиотека web-push тянется динамически: если её нет — сервер всё равно работает */
+async function initPush() {
+    if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
+        console.log("[nexus-ws] Web Push: ВЫКЛ (нет VAPID_PUBLIC / VAPID_PRIVATE)");
+        return;
+    }
+    try {
+        const mod: any = await import("npm:web-push@3.6.7");
+        webpush = mod.default || mod;
+        webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+        PUSH_ENABLED = true;
+        console.log("[nexus-ws] Web Push: ВКЛ");
+    } catch (e) {
+        console.log("[nexus-ws] Web Push: библиотека недоступна — " + e);
+    }
+}
+initPush();
+
+// =========================================
 // TELEGRAM-УВЕДОМЛЕНИЯ (необязательный модуль)
 // Токен только из переменной окружения TELEGRAM_TOKEN.
 // В коде секретов НЕТ.
