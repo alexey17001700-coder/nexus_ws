@@ -365,6 +365,15 @@ Deno.serve({ port: PORT }, (request) => {
 });
 
 console.log(`[nexus-ws] WebSocket relay запущен на порту ${PORT}`);
+console.log(TG_ENABLED
+    ? "[nexus-ws] Telegram-уведомления: ВКЛ (напиши боту /start ТвойНик)"
+    : "[nexus-ws] Telegram-уведомления: ВЫКЛ (нет TELEGRAM_TOKEN)");
+
+if (TG_ENABLED) {
+    tgPoll();
+    setInterval(tgPoll, 3_000);
+    setInterval(tgFlush, 5_000);
+}
 
 // =========================================
 // KEEP-ALIVE: чистим мёртвые соединения
