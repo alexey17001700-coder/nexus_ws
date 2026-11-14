@@ -195,6 +195,7 @@ Deno.serve({ port: PORT }, (request) => {
             socket,
             room: "",
             id: crypto.randomUUID().slice(0, 8),
+            nick: "",
             alive: true,
         };
 
