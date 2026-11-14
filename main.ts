@@ -13,6 +13,119 @@ const MAX_MSG_SIZE = 900_000;    // ~900 КБ (фото / файлы / голо�
 const PING_INTERVAL = 25_000;    // keep-alive пинг
 const MAX_ROOMS = 500;
 
+// =========================================
+// TELEGRAM-УВЕДОМЛЕНИЯ (необязательный модуль)
+// Токен только из переменной окружения TELEGRAM_TOKEN.
+// В коде секретов НЕТ.
+// Подписка: написать боту /start ТвойНик
+// =========================================
+const TG_TOKEN = Deno.env.get("TELEGRAM_TOKEN") || "";
+const TG_ENABLED = TG_TOKEN.length > 10;
+const TG_THROTTLE = 10_000;      // не чаще 1 уведомления на канал в 10 сек
+const roomNames = new Map<string, string>();   // id канала → «иконка Название»
+const tgSubs = new Map<string, string>();      // chat_id → ник ("" = уведомлять обо всём)
+const tgLast = new Map<string, number>();      // канал → время последнего уведомления
+const tgPending = new Map<string, number>();   // канал → сколько сообщений накопилось
+let tgOffset = 0;
+
+async function tgSend(chatId: string, text: string) {
+    if (!TG_ENABLED) return;
+    try {
+        await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
+        });
+    } catch (_) { /* ignore */ }
+}
+
+function tgTitle(room: string) {
+    return roomNames.get(room) || "канал";
+}
+
+/* уведомить о новом сообщении (ник отправителя — чтобы не слать ему же) */
+function tgNotify(room: string, senderNick: string) {
+    if (!TG_ENABLED) return;
+    if (!room || room === "__dir__") return;
+    if (tgSubs.size === 0) return;
+
+    // если отправитель ещё сидит в комнате — он и так всё видит, не шумим
+    const r = rooms.get(room);
+    if (r && senderNick) {
+        for (const c of r) if (c.nick === senderNick) return;
+    }
+
+    const now = Date.now();
+    const last = tgLast.get(room) || 0;
+    if (now - last < TG_THROTTLE) {
+        tgPending.set(room, (tgPending.get(room) || 0) + 1);
+        return;
+    }
+    const extra = tgPending.get(room) || 0;
+    tgPending.set(room, 0);
+    tgLast.set(room, now);
+
+    const text = `💬 Новое сообщение\n📢 ${tgTitle(room)}` + (extra > 0 ? `\n(и ещё ${extra})` : "");
+    for (const [chatId, nick] of tgSubs) {
+        if (nick && senderNick && nick === senderNick) continue;
+        tgSend(chatId, text);
+    }
+}
+
+/* досылаем накопившееся после «тишины» */
+function tgFlush() {
+    if (!TG_ENABLED) return;
+    const now = Date.now();
+    for (const [room, n] of tgPending) {
+        if (!n) continue;
+        if (now - (tgLast.get(room) || 0) < TG_THROTTLE) continue;
+        tgPending.set(room, 0);
+        tgLast.set(room, now);
+        const text = `💬 Новое сообщение\n📢 ${tgTitle(room)}\n(и ещё ${n})`;
+        for (const chatId of tgSubs.keys()) tgSend(chatId, text);
+    }
+}
+
+/* опрос бота: /start ТвойНик — подписка, /stop — отписка */
+async function tgPoll() {
+    if (!TG_ENABLED) return;
+    try {
+        const res = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/getUpdates?limit=50&offset=${tgOffset}`);
+        const data = await res.json();
+        if (!data || !data.ok || !Array.isArray(data.result)) return;
+        for (const upd of data.result) {
+            tgOffset = upd.update_id + 1;
+            const m = upd.message || upd.edited_message;
+            if (!m || !m.chat) continue;
+            const chatId = String(m.chat.id);
+            const txt = String(m.text || "").trim();
+
+            if (txt.startsWith("/stop")) {
+                tgSubs.delete(chatId);
+                tgSend(chatId, "🔕 Уведомления выключены. Вернуть: /start ТвойНик");
+                continue;
+            }
+            if (txt.startsWith("/status")) {
+                tgSend(chatId, tgSubs.has(chatId)
+                    ? `✅ Подписка активна. Ник: ${tgSubs.get(chatId) || "любой"}`
+                    : "❌ Подписки нет. Включить: /start ТвойНик");
+                continue;
+            }
+            const nick = txt.replace(/^\/(start|subscribe)\s*/, "").trim().slice(0, 40);
+            tgSubs.set(chatId, nick);
+            tgSend(chatId, nick
+                ? `✅ Уведомления включены.\nНик: ${nick}\nБуду писать при новых сообщениях в каналах.`
+                : "✅ Уведомления включены.\n\nЧтобы не получать свои же сообщения, напиши:\n/start ТвойНик");
+        }
+    } catch (_) { /* ignore */ }
+}
+
+/* чат из переменной окружения — подписка, которая живёт после перезапуска */
+{
+    const envChat = Deno.env.get("TELEGRAM_CHAT_ID") || "";
+    if (TG_ENABLED && envChat) tgSubs.set(envChat, Deno.env.get("TELEGRAM_NICK") || "");
+}
+
 type Client = {
     socket: WebSocket;
     room: string;
