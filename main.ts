@@ -241,10 +241,14 @@ function pushNotify(room: string, senderNick: string) {
     if (!room || room === "__dir__") return;
     if (pushSubs.size === 0) return;
 
-    // endpoints тех, кто прямо сейчас сидит в комнате — им push не нужен
+    // кто прямо сейчас сидит в комнате — тому push не нужен (он и так видит чат)
     const skip = new Set<string>();
+    const liveNicks = new Set<string>();
     const r = rooms.get(room);
-    if (r) for (const c of r) if (c.pushEnd) skip.add(c.pushEnd);
+    if (r) for (const c of r) {
+        if (c.pushEnd) skip.add(c.pushEnd);
+        if (c.nick) liveNicks.add(c.nick);
+    }
 
     const now = Date.now();
     const last = pushLast.get(room) || 0;
