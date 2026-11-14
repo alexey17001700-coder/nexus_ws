@@ -569,6 +569,12 @@ if (TG_ENABLED) {
     setInterval(tgFlush, 5_000);
 }
 
+// Web Push: досылаем накопившиеся уведомления + подсказка по ключам
+setInterval(pushFlush, 5_000);
+console.log(PUSH_ENABLED
+    ? "[nexus-ws] Web Push: уведомления браузера активны"
+    : "[nexus-ws] Web Push: задай VAPID_PUBLIC / VAPID_PRIVATE, чтобы включить уведомления");
+
 // =========================================
 // KEEP-ALIVE: чистим мёртвые соединения
 // =========================================
