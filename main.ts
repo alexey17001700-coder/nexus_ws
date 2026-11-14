@@ -17,6 +17,7 @@ type Client = {
     socket: WebSocket;
     room: string;
     id: string;
+    nick: string;
     alive: boolean;
 };
 
