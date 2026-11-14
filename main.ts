@@ -216,10 +216,11 @@ function pushSave(endpoint: string, sub: any, nick: string, room?: string) {
     if (nick) rec.nick = nick;
     rec.at = Date.now();
     if (room && room !== "__dir__") rec.rooms.add(room);
+    pushPersist();
 }
 
 function pushDrop(endpoint: string) {
-    if (endpoint) pushSubs.delete(endpoint);
+    if (endpoint) { pushSubs.delete(endpoint); pushPersist(); }
 }
 
 async function pushSendOne(endpoint: string, rec: PushRec, payload: any) {
