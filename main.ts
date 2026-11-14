@@ -536,8 +536,8 @@ Deno.serve({ port: PORT }, async (request) => {
             const ep = String(sub.endpoint).slice(0, 500);
             pushSave(ep, sub, String((body && body.nick) || "").slice(0, 40));
             const rec = pushSubs.get(ep);
-            const rooms = Array.isArray(body && body.rooms) ? body.rooms : [];
-            if (rec) for (const r of rooms) if (r && r !== "__dir__") rec.rooms.add(String(r));
+            const roomList = Array.isArray(body && body.rooms) ? body.rooms : [];
+            if (rec) for (const r of roomList) if (r && r !== "__dir__") rec.rooms.add(String(r));
             return json({ ok: true, push: PUSH_ENABLED, subs: pushSubs.size });
         } catch (_) {
             return json({ ok: false, error: "плохой JSON" }, 400);
