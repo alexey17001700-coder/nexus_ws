@@ -570,6 +570,24 @@ Deno.serve({ port: PORT }, async (request) => {
         return json({ ok: true, enabled: PUSH_ENABLED, key: VAPID_PUBLIC });
     }
 
+    // --- Web Push: тестовое уведомление (проверка, что всё настроено) ---
+    if (url.pathname === "/push/test") {
+        if (!PUSH_ENABLED) return json({ ok: false, error: "push выключен: нет VAPID-ключей" }, 503);
+        if (pushSubs.size === 0) return json({ ok: false, error: "нет ни одной подписки" }, 404);
+        let sent = 0;
+        for (const [ep, rec] of pushSubs) {
+            pushSendOne(ep, rec, {
+                title: "🔔 Nexus Chat",
+                body: "Тестовое уведомление — всё работает!",
+                tag: "nx-test",
+                url: "./",
+                ts: Date.now(),
+            });
+            sent++;
+        }
+        return json({ ok: true, sent, subs: pushSubs.size });
+    }
+
     // --- Web Push: сохранение подписки браузера ---
     if (url.pathname === "/subscribe" && request.method === "POST") {
         try {
