@@ -168,6 +168,43 @@ const pushSubs = new Map<string, PushRec>();   // endpoint → подписка
 const pushLast = new Map<string, number>();    // канал → время последнего уведомления
 const pushPending = new Map<string, number>(); // канал → сколько сообщений накопилось
 
+/* --- подписки сохраняем на диск: иначе после рестарта сервера
+       уведомления молча отваливаются и человек их больше не получает --- */
+const PUSH_FILE = new URL("./push_subs.json", import.meta.url).pathname;
+let pushDirty = false;
+
+function pushPersist() { pushDirty = true; }
+
+async function pushLoad() {
+    try {
+        const txt = await Deno.readTextFile(PUSH_FILE);
+        const arr = JSON.parse(txt);
+        if (!Array.isArray(arr)) return;
+        for (const it of arr) {
+            if (!it || !it.sub || !it.sub.endpoint) continue;
+            pushSubs.set(String(it.sub.endpoint), {
+                sub: it.sub,
+                nick: String(it.nick || ""),
+                rooms: new Set<string>(Array.isArray(it.rooms) ? it.rooms : []),
+                at: Number(it.at || Date.now()),
+            });
+        }
+        console.log(`[nexus-ws] Web Push: подписок загружено из файла — ${pushSubs.size}`);
+    } catch (_) { /* файла нет — обычный первый запуск */ }
+}
+
+async function pushStore() {
+    if (!pushDirty) return;
+    pushDirty = false;
+    try {
+        const arr: any[] = [];
+        for (const [ep, rec] of pushSubs) {
+            arr.push({ endpoint: ep, sub: rec.sub, nick: rec.nick, rooms: [...rec.rooms], at: rec.at });
+        }
+        await Deno.writeTextFile(PUSH_FILE, JSON.stringify(arr));
+    } catch (_) { /* нет прав на запись — работаем только в памяти */ }
+}
+
 function pushSave(endpoint: string, sub: any, nick: string, room?: string) {
     if (!endpoint) return;
     let rec = pushSubs.get(endpoint);
