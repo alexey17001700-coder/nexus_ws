@@ -516,9 +516,43 @@ Deno.serve({ port: PORT }, async (request) => {
             rooms: rooms.size,
             history: history.size,
             tg: { enabled: TG_ENABLED, subs: tgSubs.size, rooms: roomNames.size },
+            push: { enabled: PUSH_ENABLED, subs: pushSubs.size, rooms: pushLast.size },
             roomStats,
             ts: Date.now(),
         });
+    }
+
+    // --- Web Push: публичный VAPID-ключ (клиент может взять и здесь) ---
+    if (url.pathname === "/push/vapid") {
+        return json({ ok: true, enabled: PUSH_ENABLED, key: VAPID_PUBLIC });
+    }
+
+    // --- Web Push: сохранение подписки браузера ---
+    if (url.pathname === "/subscribe" && request.method === "POST") {
+        try {
+            const body: any = await request.json();
+            const sub = body && (body.sub || body.subscription);
+            if (!sub || !sub.endpoint) return json({ ok: false, error: "нет endpoint" }, 400);
+            const ep = String(sub.endpoint).slice(0, 500);
+            pushSave(ep, sub, String((body && body.nick) || "").slice(0, 40));
+            const rec = pushSubs.get(ep);
+            const rooms = Array.isArray(body && body.rooms) ? body.rooms : [];
+            if (rec) for (const r of rooms) if (r && r !== "__dir__") rec.rooms.add(String(r));
+            return json({ ok: true, push: PUSH_ENABLED, subs: pushSubs.size });
+        } catch (_) {
+            return json({ ok: false, error: "плохой JSON" }, 400);
+        }
+    }
+
+    // --- Web Push: отписка ---
+    if (url.pathname === "/unsubscribe" && request.method === "POST") {
+        try {
+            const body: any = await request.json();
+            pushDrop(String((body && body.endpoint) || ""));
+            return json({ ok: true, subs: pushSubs.size });
+        } catch (_) {
+            return json({ ok: false, error: "плохой JSON" }, 400);
+        }
     }
 
     return json({ ok: false, error: "Not found" }, 404);
