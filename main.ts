@@ -160,12 +160,112 @@ async function tgPoll() {
     if (TG_ENABLED && envChat) tgSubs.set(envChat, Deno.env.get("TELEGRAM_NICK") || "");
 }
 
+// =========================================
+// WEB PUSH — хранение подписок и отправка
+// =========================================
+type PushRec = { sub: any; nick: string; rooms: Set<string>; at: number };
+const pushSubs = new Map<string, PushRec>();   // endpoint → подписка
+const pushLast = new Map<string, number>();    // канал → время последнего уведомления
+const pushPending = new Map<string, number>(); // канал → сколько сообщений накопилось
+
+function pushSave(endpoint: string, sub: any, nick: string, room?: string) {
+    if (!endpoint) return;
+    let rec = pushSubs.get(endpoint);
+    if (!rec) {
+        rec = { sub, nick: nick || "", rooms: new Set<string>(), at: Date.now() };
+        pushSubs.set(endpoint, rec);
+    }
+    if (sub) rec.sub = sub;
+    if (nick) rec.nick = nick;
+    rec.at = Date.now();
+    if (room && room !== "__dir__") rec.rooms.add(room);
+}
+
+function pushDrop(endpoint: string) {
+    if (endpoint) pushSubs.delete(endpoint);
+}
+
+async function pushSendOne(endpoint: string, rec: PushRec, payload: any) {
+    if (!webpush || !rec || !rec.sub) return;
+    try {
+        await webpush.sendNotification(rec.sub, JSON.stringify(payload));
+    } catch (e: any) {
+        const code = e && e.statusCode;
+        // 404 / 410 — подписка умерла (браузер её отозвал), чистим
+        if (code === 404 || code === 410) pushSubs.delete(endpoint);
+    }
+}
+
+/* уведомить участников канала о новом сообщении.
+   Кому уведомление уже пришло в открытое приложение — не шумим (его сокет в комнате). */
+function pushNotify(room: string, senderNick: string) {
+    if (!PUSH_ENABLED) return;
+    if (!room || room === "__dir__") return;
+    if (pushSubs.size === 0) return;
+
+    // endpoints тех, кто прямо сейчас сидит в комнате — им push не нужен
+    const skip = new Set<string>();
+    const r = rooms.get(room);
+    if (r) for (const c of r) if (c.pushEnd) skip.add(c.pushEnd);
+
+    const now = Date.now();
+    const last = pushLast.get(room) || 0;
+    if (now - last < PUSH_THROTTLE) {
+        pushPending.set(room, (pushPending.get(room) || 0) + 1);
+        return;
+    }
+    const extra = pushPending.get(room) || 0;
+    pushPending.set(room, 0);
+    pushLast.set(room, now);
+
+    const payload = {
+        title: "💬 " + (roomNames.get(room) || "канал"),
+        body: "Новое сообщение" + (extra > 0 ? " (и ещё " + extra + ")" : ""),
+        tag: "nx-" + room,
+        room,
+        url: "./?room=" + encodeURIComponent(room),
+        ts: now,
+    };
+
+    for (const [endpoint, rec] of pushSubs) {
+        if (!rec.rooms.has(room)) continue;
+        if (skip.has(endpoint)) continue;
+        if (rec.nick && senderNick && rec.nick === senderNick) continue;
+        pushSendOne(endpoint, rec, payload);
+    }
+}
+
+/* досылаем накопившееся после «тишины» */
+function pushFlush() {
+    if (!PUSH_ENABLED) return;
+    const now = Date.now();
+    for (const [room, n] of pushPending) {
+        if (!n) continue;
+        if (now - (pushLast.get(room) || 0) < PUSH_THROTTLE) continue;
+        pushPending.set(room, 0);
+        pushLast.set(room, now);
+        const payload = {
+            title: "💬 " + (roomNames.get(room) || "канал"),
+            body: "Новых сообщений: " + n,
+            tag: "nx-" + room,
+            room,
+            url: "./?room=" + encodeURIComponent(room),
+            ts: now,
+        };
+        for (const [endpoint, rec] of pushSubs) {
+            if (!rec.rooms.has(room)) continue;
+            pushSendOne(endpoint, rec, payload);
+        }
+    }
+}
+
 type Client = {
     socket: WebSocket;
     room: string;
     id: string;
     nick: string;
     alive: boolean;
+    pushEnd?: string;   // endpoint подписки этого сокета (для «не шуметь» в открытом чате)
 };
 
 const rooms = new Map<string, Set<Client>>();
