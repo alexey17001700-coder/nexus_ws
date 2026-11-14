@@ -355,6 +355,7 @@ Deno.serve({ port: PORT }, (request) => {
             clients: allClients.size,
             rooms: rooms.size,
             history: history.size,
+            tg: { enabled: TG_ENABLED, subs: tgSubs.size, rooms: roomNames.size },
             roomStats,
             ts: Date.now(),
         });
