@@ -45,7 +45,7 @@ async function initPush() {
         console.log("[nexus-ws] Web Push: библиотека недоступна — " + e);
     }
 }
-initPush();
+await initPush();
 
 // =========================================
 // TELEGRAM-УВЕДОМЛЕНИЯ (необязательный модуль)
