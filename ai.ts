@@ -455,6 +455,27 @@ async function executeTool(name: string, args: any): Promise<string> {
       return `OK: правка внесена в ${repo}/${path}`;
     }
 
+    if (name === "list_repos") {
+      const d = await gh(`/user/repos?per_page=100&sort=updated`);
+      if (!Array.isArray(d)) return "пусто";
+      return d.map((r: any) => r.name).join("\n");
+    }
+
+    if (name === "delete_file") {
+      if (repo === "digital-agency" || repo === "window_calc") {
+        return "ОТКАЗ: репозиторий защищён — удаление запрещено";
+      }
+      const g = guard(path, "delete");
+      if (g) return "ОТКАЗ: " + g;
+      const r = await ghRead(repo, path);
+      await gh(`/repos/${GH_OWNER}/${repo}/contents/${encodeURI(path)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: args?.message || `ai: удалён ${path}`, sha: r.sha }),
+      });
+      return `OK: удалён ${repo}/${path}`;
+    }
+
     return "Неизвестный инструмент: " + name;
   } catch (e) {
     return "ОШИБКА: " + String((e as any)?.message || e).slice(0, 300);
