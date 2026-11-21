@@ -5,6 +5,15 @@
 
 const PORT = Number(Deno.env.get("AI_PORT") || 8002);
 
+// --- Доступ к GitHub (инструменты Помощника) ---
+// Пока GITHUB_TOKEN не задан — Помощник только советует, файлы не трогает.
+const GH_TOKEN = env("GITHUB_TOKEN", "GH_TOKEN");
+const GH_OWNER = env("GITHUB_OWNER", "GH_USER");
+const MAX_ROUNDS = Number(env("AI_MAX_ROUNDS") || 6);
+const PROTECTED_FILES = ["main.ts"];
+const PROTECTED_DIRS = ["backup/"];
+const toolsEnabled = (): boolean => !!GH_TOKEN && !!GH_OWNER;
+
 type Msg = { role: "system" | "user" | "assistant"; content: string };
 
 interface Provider {
