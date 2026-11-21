@@ -623,6 +623,17 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req: Request) => {
     });
   }
 
+  // Инструменты: включены ли (настроен ли токен GitHub)
+  if (url.pathname === "/ai/tools") {
+    return json({
+      ok: true,
+      enabled: toolsEnabled(),
+      hint: toolsEnabled()
+        ? "Помощник может читать и править файлы репозиториев"
+        : "Нужны GITHUB_TOKEN и GITHUB_OWNER в .env",
+    });
+  }
+
   if (url.pathname === "/ai/models") {
     const chain = buildChain();
     return json({
