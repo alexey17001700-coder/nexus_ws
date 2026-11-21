@@ -507,6 +507,90 @@ async function runAgent(
   return { ok: false, tried, actions, ms: Date.now() - t0 };
 }
 
+// --- Инструменты: модель просит действие, сервер выполняет, отдаёт результат ---
+const TOOL_RE = /<tool>\s*([\s\S]*?)\s*<\/tool>/i;
+
+async function runWithTools(
+  messages: Msg[],
+  temperature: number,
+  only: string,
+  maxSteps = 6,
+): Promise<{
+  ok: boolean;
+  text?: string;
+  provider?: string;
+  model?: string;
+  tried: any[];
+  steps: any[];
+  ms: number;
+}> {
+  const t0 = Date.now();
+  const steps: any[] = [];
+  const tried: any[] = [];
+  let last: any = null;
+  let msgs = messages;
+
+  for (let i = 0; i < maxSteps; i++) {
+    const r = await route(msgs, temperature, only);
+    if (!r.ok) return { ok: false, tried: r.tried, steps, ms: Date.now() - t0 };
+    last = r;
+    tried.push(...r.tried);
+
+    const m = String(r.text || "").match(TOOL_RE);
+    if (!m) {
+      return {
+        ok: true,
+        text: r.text,
+        provider: r.provider,
+        model: r.model,
+        tried,
+        steps,
+        ms: Date.now() - t0,
+      };
+    }
+
+    let call: any = null;
+    try {
+      call = JSON.parse(m[1]);
+    } catch {
+      call = null;
+    }
+
+    let result = "";
+    if (!call || !call.name) {
+      result = 'Ошибка: не разобрал вызов. Нужен JSON вида {"name":"...","args":{...}}';
+    } else {
+      const out = await runTool(String(call.name), call.args || {});
+      result = out.text;
+      steps.push({
+        name: String(call.name),
+        args: call.args || {},
+        ok: out.ok,
+        chars: out.text.length,
+      });
+    }
+
+    msgs = msgs.concat([
+      { role: "assistant", content: String(r.text).slice(0, 4000) },
+      {
+        role: "user",
+        content: "РЕЗУЛЬТАТ ИНСТРУМЕНТА:\n" + result.slice(0, 20000) +
+          "\n\nПродолжай. Если задача выполнена — дай короткий отчёт Боссу.",
+      },
+    ]);
+  }
+
+  return {
+    ok: true,
+    text: String(last?.text || "") + "\n\n(остановлен: превышен лимит шагов инструментов)",
+    provider: last?.provider,
+    model: last?.model,
+    tried,
+    steps,
+    ms: Date.now() - t0,
+  };
+}
+
 Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req: Request) => {
   const url = new URL(req.url);
 
