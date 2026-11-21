@@ -584,6 +584,7 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req: Request) => {
       provider: r.provider,
       model: r.model,
       tried: r.tried,
+      actions: (r as any).actions || [],
       ms: r.ms,
     });
   }
