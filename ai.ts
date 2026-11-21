@@ -325,6 +325,30 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "list_repos",
+      description: "Список репозиториев Босса на GitHub.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_file",
+      description: "Удалить файл из репозитория. main.ts, backup/ и репозитории digital-agency, window_calc защищены.",
+      parameters: {
+        type: "object",
+        properties: {
+          repo: { type: "string" },
+          path: { type: "string" },
+          message: { type: "string" },
+        },
+        required: ["repo", "path"],
+      },
+    },
+  },
 ];
 
 function b64encode(s: string): string {
