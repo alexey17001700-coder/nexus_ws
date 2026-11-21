@@ -120,6 +120,7 @@ deno run --allow-net --allow-env --allow-read ai.ts
 |---|---|---|
 | `GET` | `/ai/health` | какие провайдеры настроены (ключи не раскрываются) |
 | `GET` | `/ai/models` | список моделей и порядок роутера |
+| `GET` | `/ai/memory` | сколько памяти загружено (`?reload=1` — перечитать файл) |
 | `POST` | `/ai` | `{messages:[{role,content}], provider?, temperature?}` → ответ |
 
 ### Роутер
