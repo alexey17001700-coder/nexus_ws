@@ -222,6 +222,23 @@ GLM_KEY=вставить_сюда_ключ
 
 > `.env` в репозиторий **не коммитится** — ключ остаётся только на телефоне.
 
+### Шаг 2.5. Дать Помощнику доступ к файлам (необязательно)
+
+Без этого он только советует. Чтобы правил репозитории — нужен токен GitHub:
+
+1. GitHub → **Settings** → **Developer settings** → **Personal access tokens**
+   → **Fine-grained tokens** → **Generate new token**.
+2. Repository access: **All repositories**.
+3. Permissions → Repository permissions → **Contents: Read and write**.
+4. Скопировать токен (`github_pat_...`) и дописать в `.env`:
+
+```
+GITHUB_TOKEN=вставить_сюда_токен
+GITHUB_OWNER=твой_логин_на_GitHub
+```
+
+Проверка: `curl http://localhost:8002/ai/tools` → `"enabled":true`.
+
 ### Шаг 3. Запустить шлюз
 
 ```bash
