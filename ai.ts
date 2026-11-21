@@ -150,9 +150,10 @@ function clean(messages: Msg[]): Msg[] {
 // --- Один вызов провайдера ---
 async function callProvider(
   p: Provider,
-  messages: Msg[],
+  messages: any[],
   temperature: number,
-): Promise<{ text: string; raw: unknown }> {
+  tools?: any[],
+): Promise<{ text: string; raw: unknown; message: any }> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${p.key}`,
