@@ -192,16 +192,18 @@ async function callProvider(
     throw err;
   }
 
+  const message = data?.choices?.[0]?.message ?? null;
   const text =
-    data?.choices?.[0]?.message?.content ??
+    message?.content ??
     data?.choices?.[0]?.text ??
     data?.response ??
     "";
 
-  if (!text || !String(text).trim()) {
+  const hasCalls = Array.isArray(message?.tool_calls) && message.tool_calls.length > 0;
+  if (!hasCalls && (!text || !String(text).trim())) {
     throw new Error("Пустой ответ модели");
   }
-  return { text: String(text).trim(), raw: data };
+  return { text: String(text || "").trim(), raw: data, message };
 }
 
 // --- Роутер: пробуем по цепочке, лимит/ошибка → следующий ---
