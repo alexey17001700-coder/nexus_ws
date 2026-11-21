@@ -166,7 +166,13 @@ async function callProvider(
   const res = await fetch(p.url, {
     method: "POST",
     headers,
-    body: JSON.stringify({ model: p.model, messages, temperature, stream: false }),
+    body: JSON.stringify({
+      model: p.model,
+      messages,
+      temperature,
+      stream: false,
+      ...(tools && tools.length ? { tools, tool_choice: "auto" } : {}),
+    }),
     signal: AbortSignal.timeout(90_000),
   });
 
