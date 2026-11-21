@@ -699,3 +699,4 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req: Request) => {
 
 console.log(`🤖 ИИ-шлюз Штаба слушает :${PORT}`);
 console.log(`   Провайдеры: ${buildChain().map((p) => p.name).join(", ") || "— ключей нет —"}`);
+console.log(`   Инструменты GitHub: ${toolsEnabled() ? "включены" : "выключены (нет GITHUB_TOKEN / GITHUB_OWNER)"}`);
