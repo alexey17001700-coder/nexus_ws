@@ -631,6 +631,10 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req: Request) => {
     // Персону подставляем, если клиент не прислал свой system
     if (!messages.some((m) => m.role === "system")) {
       messages.unshift({ role: "system", content: systemPrompt() });
+    } else if (toolsEnabled()) {
+      // Инструменты описываем всегда — иначе модель о них не знает
+      const i = messages.findIndex((m) => m.role === "system");
+      messages[i] = { role: "system", content: messages[i].content + "\n\n" + TOOL_SPEC };
     }
 
     const temperature = typeof payload?.temperature === "number"
