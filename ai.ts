@@ -41,6 +41,24 @@ const SYSTEM =
     "Файл main.ts и папку backup не удалять. Правки — точечные.",
   ].join(" ");
 
+// --- Память Помощника: ai_memory.md рядом с ai.ts ---
+// Файл необязательный. Если его нет — работаем без памяти.
+let MEMORY = "";
+async function loadMemory(): Promise<string> {
+  try {
+    MEMORY = await Deno.readTextFile(new URL("./ai_memory.md", import.meta.url));
+  } catch {
+    MEMORY = "";
+  }
+  return MEMORY;
+}
+await loadMemory();
+
+function systemPrompt(): string {
+  if (!MEMORY.trim()) return SYSTEM;
+  return SYSTEM + "\n\n--- ПАМЯТЬ ПРОЕКТА (ai_memory.md) ---\n" + MEMORY.trim();
+}
+
 // --- Провайдеры (все OpenAI-совместимые) ---
 function buildChain(): Provider[] {
   const chain: Provider[] = [];
