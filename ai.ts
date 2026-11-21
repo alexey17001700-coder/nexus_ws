@@ -607,6 +607,55 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req: Request) => {
     });
   }
 
+  // РЕАЛЬНАЯ ПРОВЕРКА «КТО ОНЛАЙН»: мини-запрос к каждому провайдеру.
+  // Кэш 30 с — Надзиратель опрашивает часто, лимиты не жжём.
+  if (url.pathname === "/ai/ping") {
+    const g: any = globalThis as any;
+    g.__pingCache = g.__pingCache || { at: 0, data: null };
+    const now = Date.now();
+    if (!url.searchParams.get("force") && g.__pingCache.data && now - g.__pingCache.at < 30_000) {
+      return json({ ok: true, cached: true, ...g.__pingCache.data });
+    }
+    const chain = buildChain();
+    const checks = await Promise.all(chain.map(async (p) => {
+      const t0 = Date.now();
+      try {
+        const res = await fetch(p.url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${p.key}`,
+            ...(p.name === "OpenRouter"
+              ? { "HTTP-Referer": "https://shtab-boss.duckdns.org", "X-Title": "Shtab AI" }
+              : {}),
+          },
+          body: JSON.stringify({
+            model: p.model,
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 1,
+            temperature: 0,
+            stream: false,
+          }),
+          signal: AbortSignal.timeout(15_000),
+        });
+        const errText = res.ok ? "" : (await res.text()).slice(0, 200);
+        return { name: p.name, model: p.model, online: res.ok, ms: Date.now() - t0, error: errText };
+      } catch (e) {
+        return {
+          name: p.name,
+          model: p.model,
+          online: false,
+          ms: Date.now() - t0,
+          error: String((e as any)?.message || e).slice(0, 200),
+        };
+      }
+    }));
+    const online = checks.filter((c) => c.online).map((c) => c.name);
+    const data = { providers: checks, online, count: online.length, checkedAt: now };
+    g.__pingCache = { at: now, data };
+    return json({ ok: true, cached: false, ...data });
+  }
+
   if (url.pathname === "/ai/models") {
     const chain = buildChain();
     return json({
