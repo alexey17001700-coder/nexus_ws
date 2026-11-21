@@ -277,7 +277,7 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req: Request) => {
 
     // Персону подставляем, если клиент не прислал свой system
     if (!messages.some((m) => m.role === "system")) {
-      messages.unshift({ role: "system", content: SYSTEM });
+      messages.unshift({ role: "system", content: systemPrompt() });
     }
 
     const temperature = typeof payload?.temperature === "number"
