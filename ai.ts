@@ -254,6 +254,17 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req: Request) => {
     });
   }
 
+  // Память: сколько загружено. ?reload=1 — перечитать файл без перезапуска.
+  if (url.pathname === "/ai/memory") {
+    if (url.searchParams.get("reload")) await loadMemory();
+    return json({
+      ok: true,
+      loaded: MEMORY.length > 0,
+      chars: MEMORY.length,
+      lines: MEMORY ? MEMORY.split("\n").length : 0,
+    });
+  }
+
   if (url.pathname === "/ai/models") {
     const chain = buildChain();
     return json({
