@@ -565,7 +565,11 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req: Request) => {
 
     const only = typeof payload?.provider === "string" ? payload.provider : "";
 
-    const r = await route(messages, temperature, only);
+    // Инструменты включаем, если есть токен GitHub и клиент не отключил их
+    const wantTools = payload?.tools !== false && toolsEnabled();
+    const r = wantTools
+      ? await runAgent(messages, temperature, only)
+      : await route(messages, temperature, only);
 
     if (!r.ok) {
       return json({
