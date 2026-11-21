@@ -3,8 +3,6 @@
 // Порт: AI_PORT || 8002. Порт чата (8001) не занимает, main.ts не трогает.
 // Ключи — ТОЛЬКО из переменных окружения. В коде секретов нет.
 
-import { runTool, TOOL_SPEC, toolsEnabled } from "./ai_tools.ts";
-
 const PORT = Number(Deno.env.get("AI_PORT") || 8002);
 
 // --- Доступ к GitHub (инструменты Помощника) ---
