@@ -66,8 +66,12 @@ async function loadMemory(): Promise<string> {
 await loadMemory();
 
 function systemPrompt(): string {
-  if (!MEMORY.trim()) return SYSTEM;
-  return SYSTEM + "\n\n--- ПАМЯТЬ ПРОЕКТА (ai_memory.md) ---\n" + MEMORY.trim();
+  let base = SYSTEM;
+  if (MEMORY.trim()) {
+    base += "\n\n--- ПАМЯТЬ ПРОЕКТА (ai_memory.md) ---\n" + MEMORY.trim();
+  }
+  if (toolsEnabled()) base += "\n\n" + TOOL_SPEC;
+  return base;
 }
 
 // --- Провайдеры (все OpenAI-совместимые) ---
