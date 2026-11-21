@@ -517,6 +517,8 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req: Request) => {
       providers: chain.map((p) => ({ name: p.name, model: p.model, note: p.note })),
       default: DEFAULT_NAME || (chain[0]?.name ?? ""),
       count: chain.length,
+      tools: toolsEnabled() ? "on" : "off",
+      owner: GH_OWNER || "",
     });
   }
 
