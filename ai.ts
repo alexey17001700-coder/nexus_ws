@@ -253,6 +253,254 @@ async function route(
   return { ok: false, tried, ms: Date.now() - t0 };
 }
 
+// ============================================================
+// ИНСТРУМЕНТЫ: Помощник читает и правит файлы в репозиториях.
+// Работают только при заданных GITHUB_TOKEN и GITHUB_OWNER.
+// ============================================================
+
+const TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "list_repo_files",
+      description: "Список файлов в корне репозитория.",
+      parameters: {
+        type: "object",
+        properties: { repo: { type: "string", description: "Имя репозитория" } },
+        required: ["repo"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_file",
+      description: "Прочитать файл из репозитория.",
+      parameters: {
+        type: "object",
+        properties: {
+          repo: { type: "string" },
+          path: { type: "string", description: "Путь к файлу" },
+        },
+        required: ["repo", "path"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "write_file",
+      description: "Записать файл целиком (создать или перезаписать).",
+      parameters: {
+        type: "object",
+        properties: {
+          repo: { type: "string" },
+          path: { type: "string" },
+          content: { type: "string", description: "ПОЛНЫЙ новый код файла" },
+          message: { type: "string", description: "Комментарий коммита" },
+        },
+        required: ["repo", "path", "content"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "replace_in_file",
+      description: "Точечная замена фрагмента. Фрагмент search должен встречаться ровно один раз.",
+      parameters: {
+        type: "object",
+        properties: {
+          repo: { type: "string" },
+          path: { type: "string" },
+          search: { type: "string", description: "Что заменить (точь-в-точь)" },
+          replace: { type: "string", description: "На что заменить" },
+          message: { type: "string" },
+        },
+        required: ["repo", "path", "search", "replace"],
+      },
+    },
+  },
+];
+
+function b64encode(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
+function b64decode(s: string): string {
+  const bin = atob(String(s).replace(/\s/g, ""));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+async function gh(path: string, init?: RequestInit): Promise<any> {
+  const res = await fetch("https://api.github.com" + path, {
+    ...init,
+    headers: {
+      "Accept": "application/vnd.github+json",
+      "Authorization": `Bearer ${GH_TOKEN}`,
+      "User-Agent": "shtab-ai",
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...((init?.headers as Record<string, string>) || {}),
+    },
+    signal: AbortSignal.timeout(30_000),
+  });
+  const text = await res.text();
+  let data: any = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = null;
+  }
+  if (!res.ok) throw new Error(data?.message || `GitHub HTTP ${res.status}`);
+  return data;
+}
+
+function guard(path: string, action: string): string {
+  if (!path) return "не указан путь";
+  if (PROTECTED_DIRS.some((d) => path.startsWith(d))) return `папка ${path} защищена`;
+  if (PROTECTED_FILES.includes(path) && action !== "read") return `файл ${path} защищён — правки только вручную`;
+  return "";
+}
+
+async function ghRead(repo: string, path: string): Promise<{ content: string; sha: string }> {
+  const d = await gh(`/repos/${GH_OWNER}/${repo}/contents/${encodeURI(path)}`);
+  if (Array.isArray(d)) throw new Error("это папка — используй list_repo_files");
+  return { content: b64decode(d.content || ""), sha: d.sha };
+}
+
+async function ghWrite(repo: string, path: string, content: string, message?: string): Promise<void> {
+  let sha: string | undefined;
+  try {
+    sha = (await ghRead(repo, path)).sha;
+  } catch {
+    sha = undefined;
+  }
+  const body: any = { message: message || `ai: ${path}`, content: b64encode(content) };
+  if (sha) body.sha = sha;
+  await gh(`/repos/${GH_OWNER}/${repo}/contents/${encodeURI(path)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+async function executeTool(name: string, args: any): Promise<string> {
+  try {
+    const repo = String(args?.repo || "digital-agency");
+    const path = String(args?.path || "");
+
+    if (name === "list_repo_files") {
+      const d = await gh(`/repos/${GH_OWNER}/${repo}/contents/`);
+      if (!Array.isArray(d)) return "пусто";
+      return d.map((f: any) => `${f.type === "dir" ? "📁" : "📄"} ${f.name}`).join("\n");
+    }
+
+    if (name === "read_file") {
+      const r = await ghRead(repo, path);
+      return r.content.slice(0, 60000);
+    }
+
+    if (name === "write_file") {
+      const g = guard(path, "write");
+      if (g) return "ОТКАЗ: " + g;
+      const content = String(args?.content ?? "");
+      await ghWrite(repo, path, content, args?.message);
+      return `OK: записан ${repo}/${path} (${content.length} симв.)`;
+    }
+
+    if (name === "replace_in_file") {
+      const g = guard(path, "replace");
+      if (g) return "ОТКАЗ: " + g;
+      const search = String(args?.search ?? "");
+      const replace = String(args?.replace ?? "");
+      if (!search) return "ОТКАЗ: пустой search";
+      const r = await ghRead(repo, path);
+      const n = r.content.split(search).length - 1;
+      if (n === 0) return `ОТКАЗ: фрагмент не найден в ${repo}/${path}`;
+      if (n > 1) return `ОТКАЗ: фрагмент встречается ${n} раз — уточни search`;
+      await ghWrite(repo, path, r.content.replace(search, replace), args?.message || `ai: правка ${path}`);
+      return `OK: правка внесена в ${repo}/${path}`;
+    }
+
+    return "Неизвестный инструмент: " + name;
+  } catch (e) {
+    return "ОШИБКА: " + String((e as any)?.message || e).slice(0, 300);
+  }
+}
+
+// --- Агент: модель просит инструмент → сервер выполняет → отдаёт результат ---
+async function runAgent(
+  messages: any[],
+  temperature: number,
+  only?: string,
+): Promise<{ ok: boolean; text?: string; provider?: string; model?: string; tried: any[]; actions: string[]; ms: number }> {
+  const chain = buildChain();
+  const list = only ? chain.filter((p) => p.name.toLowerCase() === only.toLowerCase()) : chain;
+  const tried: any[] = [];
+  const actions: string[] = [];
+  const t0 = Date.now();
+
+  if (!list.length) return { ok: false, tried, actions, ms: 0 };
+
+  const useTools = toolsEnabled();
+  const convo: any[] = messages.slice();
+
+  for (const p of list) {
+    const ts = Date.now();
+    try {
+      let text = "";
+      for (let round = 0; round < MAX_ROUNDS; round++) {
+        const r = await callProvider(p, convo, temperature, useTools ? TOOLS : undefined);
+        const calls = Array.isArray(r.message?.tool_calls) ? r.message.tool_calls : [];
+        if (!calls.length) {
+          text = r.text;
+          break;
+        }
+        convo.push({ role: "assistant", content: r.message?.content || "", tool_calls: calls });
+        for (const c of calls) {
+          let a: any = {};
+          try {
+            a = JSON.parse(c?.function?.arguments || "{}");
+          } catch {
+            a = {};
+          }
+          const out = await executeTool(c?.function?.name, a);
+          actions.push(
+            `${c?.function?.name}(${a?.repo || ""}${a?.path ? "/" + a.path : ""}) → ${out.slice(0, 160)}`,
+          );
+          convo.push({ role: "tool", tool_call_id: c?.id, content: out.slice(0, 20000) });
+        }
+      }
+      tried.push({ provider: p.name, model: p.model, ok: true, ms: Date.now() - ts });
+      return {
+        ok: true,
+        text: text || "(инструменты выполнены)",
+        provider: p.name,
+        model: p.model,
+        tried,
+        actions,
+        ms: Date.now() - t0,
+      };
+    } catch (e) {
+      tried.push({
+        provider: p.name,
+        model: p.model,
+        ok: false,
+        status: (e as any).status || 0,
+        error: String((e as any)?.message || e).slice(0, 300),
+        ms: Date.now() - ts,
+      });
+    }
+  }
+
+  return { ok: false, tried, actions, ms: Date.now() - t0 };
+}
+
 Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req: Request) => {
   const url = new URL(req.url);
 
